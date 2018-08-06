@@ -354,3 +354,192 @@ test$total_baths = test$BsmtFullBath + test$FullBath + (0.5 * (test$BsmtHalfBath
 train <- select(train, -Id)
 test <- select(test, -Id)
 ```
+
+Model Development
+-----------------
+
+This is the main aspect of this kaggle competition. I will be using gradient boosted trees, XGBoost, for the model building. There will be tuning parameters as well.
+
+``` r
+library(caret)
+```
+
+    ## Warning: package 'caret' was built under R version 3.4.4
+
+    ## Loading required package: lattice
+
+``` r
+library(Metrics)
+```
+
+    ## Warning: package 'Metrics' was built under R version 3.4.4
+
+``` r
+library(xgboost)
+```
+
+    ## Warning: package 'xgboost' was built under R version 3.4.4
+
+    ## 
+    ## Attaching package: 'xgboost'
+
+    ## The following object is masked from 'package:dplyr':
+    ## 
+    ##     slice
+
+``` r
+# Create custom summary function in proper format for caret
+custom_summary <- function(data, lev = NULL, model = NULL){
+  out = rmsle(data[, "obs"], data[, "pred"])
+  names(out) = c("rmsle")
+  out
+}
+
+# Create control object
+control <- trainControl(method = "cv",  # Use cross validation
+                       number = 5,     # 5-folds
+                       summaryFunction = custom_summary                      
+)
+
+
+# Create grid of tuning parameters
+grid <- expand.grid(nrounds=c(100, 200, 400, 800), # Test 4 values for boosting rounds
+                    max_depth= c(4, 6),           # Test 3 values for tree depth
+                    eta=c(0.1, 0.05, 0.025),      # Test 3 values for learning rate: 0.1, 0.05, 0.025
+                    gamma= c(0.1),                #https://xgboost.readthedocs.io/en/latest/parameter.html for explanation
+                    colsample_bytree = c(1), 
+                    min_child_weight = c(1),
+                    subsample = c(1))
+
+#training and development of model
+
+xgb_tree_model <- train(SalePrice~.,      # Predict SalePrice using all features
+                        data=train,
+                        method="xgbTree",
+                        trControl=control, #for cross validation w control
+                        tuneGrid=grid, 
+                        metric="rmsle",     # Use custom performance metric
+                        maximize = FALSE)   # Minimize the metric
+```
+
+Analysis of Model
+-----------------
+
+``` r
+#Analysis of results
+xgb_tree_model$bestTune #tells us the best model, is a tree with depth 4, trained 400 rounds w learning rate 0.1 (eta)
+```
+
+    ##   nrounds max_depth   eta gamma colsample_bytree min_child_weight
+    ## 4     800         4 0.025   0.1                1                1
+    ##   subsample
+    ## 4         1
+
+``` r
+xgb_tree_model$results #find the RMSLE from the above model here: RMSLE = 0.1327114; the lower the better!
+```
+
+    ##      eta max_depth gamma colsample_bytree min_child_weight subsample
+    ## 1  0.025         4   0.1                1                1         1
+    ## 9  0.050         4   0.1                1                1         1
+    ## 17 0.100         4   0.1                1                1         1
+    ## 5  0.025         6   0.1                1                1         1
+    ## 13 0.050         6   0.1                1                1         1
+    ## 21 0.100         6   0.1                1                1         1
+    ## 2  0.025         4   0.1                1                1         1
+    ## 10 0.050         4   0.1                1                1         1
+    ## 18 0.100         4   0.1                1                1         1
+    ## 6  0.025         6   0.1                1                1         1
+    ## 14 0.050         6   0.1                1                1         1
+    ## 22 0.100         6   0.1                1                1         1
+    ## 3  0.025         4   0.1                1                1         1
+    ## 11 0.050         4   0.1                1                1         1
+    ## 19 0.100         4   0.1                1                1         1
+    ## 7  0.025         6   0.1                1                1         1
+    ## 15 0.050         6   0.1                1                1         1
+    ## 23 0.100         6   0.1                1                1         1
+    ## 4  0.025         4   0.1                1                1         1
+    ## 12 0.050         4   0.1                1                1         1
+    ## 20 0.100         4   0.1                1                1         1
+    ## 8  0.025         6   0.1                1                1         1
+    ## 16 0.050         6   0.1                1                1         1
+    ## 24 0.100         6   0.1                1                1         1
+    ##    nrounds     rmsle    rmsleSD
+    ## 1      100 0.1603772 0.01366649
+    ## 9      100 0.1335609 0.01611432
+    ## 17     100 0.1288234 0.01514207
+    ## 5      100 0.1600550 0.01352465
+    ## 13     100 0.1335101 0.01512673
+    ## 21     100 0.1319013 0.01659683
+    ## 2      200 0.1332782 0.01544445
+    ## 10     200 0.1283106 0.01601184
+    ## 18     200 0.1282649 0.01518063
+    ## 6      200 0.1341677 0.01530090
+    ## 14     200 0.1304605 0.01646476
+    ## 22     200 0.1315864 0.01717607
+    ## 3      400 0.1274373 0.01535594
+    ## 11     400 0.1270630 0.01562608
+    ## 19     400 0.1289407 0.01491713
+    ## 7      400 0.1313435 0.01664478
+    ## 15     400 0.1299127 0.01672371
+    ## 23     400 0.1317310 0.01725485
+    ## 4      800 0.1265917 0.01536635
+    ## 12     800 0.1272017 0.01610431
+    ## 20     800 0.1290336 0.01478126
+    ## 8      800 0.1310821 0.01670152
+    ## 16     800 0.1297831 0.01677597
+    ## 24     800 0.1318120 0.01728210
+
+``` r
+varImp(xgb_tree_model) #identify which predictors are most impt to the model
+```
+
+    ## xgbTree variable importance
+    ## 
+    ##   only 20 most important variables shown (out of 270)
+    ## 
+    ##                      Overall
+    ## OverallQual         100.0000
+    ## total_sq_footage     89.3618
+    ## total_baths           6.6701
+    ## YearBuilt             5.5404
+    ## LotArea               3.9323
+    ## BsmtFinSF1            3.3930
+    ## X2ndFlrSF             3.2530
+    ## GarageCars            2.8897
+    ## YearRemodAdd          2.7266
+    ## GrLivArea             2.2998
+    ## GarageArea            1.9245
+    ## OverallCond           1.7977
+    ## Fireplaces            1.4501
+    ## TotalBsmtSF           1.2327
+    ## NeighborhoodEdwards   1.1427
+    ## LotFrontage           1.0158
+    ## KitchenQualTA         0.9489
+    ## GarageYrBlt           0.7664
+    ## BsmtUnfSF             0.6924
+    ## KitchenAbvGr          0.6616
+
+Model Testing
+-------------
+
+``` r
+test_predictions <- predict(xgb_tree_model, newdata=test)
+```
+
+Submission to Kaggle
+--------------------
+
+``` r
+submission <- read.csv("sample_submission.csv")
+submission$SalePrice <- test_predictions
+head(submission)
+```
+
+    ##     Id SalePrice
+    ## 1 1461  127097.6
+    ## 2 1462  162872.7
+    ## 3 1463  185697.5
+    ## 4 1464  187500.6
+    ## 5 1465  187619.8
+    ## 6 1466  177523.4
