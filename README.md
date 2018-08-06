@@ -354,5 +354,3 @@ test$total_baths = test$BsmtFullBath + test$FullBath + (0.5 * (test$BsmtHalfBath
 train <- select(train, -Id)
 test <- select(test, -Id)
 ```
-
-![](README_files/figure-markdown_github/pressure-1.png)
